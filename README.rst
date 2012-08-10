@@ -26,4 +26,11 @@ different port, say 4445). Then::
 
 Contact
 =======
-Miki Tebeka <miki.tebeka@gmail.com>
+Miki Tebeka <miki.tebeka@gmail.com> or here_.
+
+.. _here: https://bitbucket.org/tebeka/seamless
+
+
+LICENSE
+=======
+MIT
