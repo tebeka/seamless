@@ -24,6 +24,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -33,7 +34,7 @@ var backend string
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: seamless LISTEN_ADDR BACKEND\n")
+		fmt.Fprintf(os.Stderr, "usage: seamless LISTEN_PORT BACKEND\n")
 		fmt.Fprintf(os.Stderr, "command line switches:\n")
 		flag.PrintDefaults()
 	}
@@ -43,7 +44,7 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
-	localAddr := flag.Arg(0)
+	localAddr := fmt.Sprintf(":%s", flag.Arg(0))
 	backend = flag.Arg(1)
 
 	local, err := net.Listen("tcp", localAddr)
@@ -51,7 +52,7 @@ func main() {
 		die(fmt.Sprintf("cannot listen: %v", err))
 	}
 
-	go runHttpServer(*port)
+	go startHttpServer(*port)
 
 	for {
 		conn, err := local.Accept()
@@ -65,7 +66,8 @@ func main() {
 func forward(local net.Conn, remoteAddr string) {
 	remote, err := net.Dial("tcp", remoteAddr)
 	if remote == nil {
-		fmt.Fprintf(os.Stderr, "remote dial failed: %v\n", err)
+		log.Printf("remote dial failed: %v\n", err)
+		local.Close()
 		return
 	}
 	go io.Copy(local, remote)
@@ -77,7 +79,7 @@ func die(msg string) {
 	os.Exit(1)
 }
 
-func runHttpServer(port int) {
+func startHttpServer(port int) {
 	http.HandleFunc("/switch", switchHandler)
 	http.HandleFunc("/current", currentHandler)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
@@ -86,7 +88,9 @@ func runHttpServer(port int) {
 func switchHandler(w http.ResponseWriter, req *http.Request) {
 	newBackend := req.FormValue("backend")
 	if len(newBackend) == 0 {
-		http.Error(w, "missing 'backend' parameter", http.StatusBadRequest)
+		msg := "error: missing 'backend' parameter"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 	backend = newBackend
@@ -94,5 +98,6 @@ func switchHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func currentHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprintf(w, "%s\n", backend)
 }
