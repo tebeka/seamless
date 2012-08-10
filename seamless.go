@@ -1,12 +1,22 @@
-/* Proxy TCP between two servers. Allow you to deploy new code to one server
-   then switch traffic to it without downtime.
+/* A TCP proxy that allow you to deploy new code then switch traffic to it
+   without downtime.
 
    Switching server is done with HTTP interface with the following API:
-   /toggle - will toggle between servers
+   /switch?backend=address - will switch traffic to new backend
    /current - will return (in plain text) current server
-   /servers - will return active, backup servers
 
-Original code by Roger Peppe at http://bit.ly/Oc1YtF
+   Work flow:
+	   Start first backend at port 4444
+	   Run `./seamless 8080 localhost:4444`
+
+	   Direct all traffic to port 8080 on local machine.
+
+	   When you need to upgrade the backend, start a new one (with new code on
+	   a different port, say 4445).
+	   The `curl http://localhost:6777/switch?backend=localhost:4445. 
+	   New traffic will be directed to new server.
+
+Original forward code by Roger Peppe (see http://bit.ly/Oc1YtF)
 */
 package main
 
@@ -19,23 +29,22 @@ import (
 	"os"
 )
 
-var remotes = []string{"", ""}
-var current int
+var backend string
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: seesaw LISTEN FIRST SECOND\n")
+		fmt.Fprintf(os.Stderr, "usage: seamless LISTEN_ADDR BACKEND\n")
+		fmt.Fprintf(os.Stderr, "command line switches:\n")
 		flag.PrintDefaults()
 	}
 	port := flag.Int("httpPort", 6777, "http interface port")
 	flag.Parse()
-	if flag.NArg() != 3 {
+	if flag.NArg() != 2 {
 		flag.Usage()
 		os.Exit(1)
 	}
 	localAddr := flag.Arg(0)
-	remotes[0] = flag.Arg(1)
-	remotes[1] = flag.Arg(2)
+	backend = flag.Arg(1)
 
 	local, err := net.Listen("tcp", localAddr)
 	if local == nil {
@@ -49,7 +58,7 @@ func main() {
 		if conn == nil {
 			die(fmt.Sprintf("accept failed: %v", err))
 		}
-		go forward(conn, remotes[current])
+		go forward(conn, backend)
 	}
 }
 
@@ -69,22 +78,21 @@ func die(msg string) {
 }
 
 func runHttpServer(port int) {
-	http.HandleFunc("/toggle", toggleHandler)
+	http.HandleFunc("/switch", switchHandler)
 	http.HandleFunc("/current", currentHandler)
-	http.HandleFunc("/servers", serversHandler)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
-func toggleHandler(w http.ResponseWriter, req *http.Request) {
-	current = 1 - current
+func switchHandler(w http.ResponseWriter, req *http.Request) {
+	newBackend := req.FormValue("backend")
+	if len(newBackend) == 0 {
+		http.Error(w, "missing 'backend' parameter", http.StatusBadRequest)
+		return
+	}
+	backend = newBackend
 	currentHandler(w, req)
 }
 
 func currentHandler(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, "%s\n", remotes[current])
-}
-
-func serversHandler(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, "%s\n", remotes[current])
-	fmt.Fprintf(w, "%s\n", remotes[1-current])
+	fmt.Fprintf(w, "%s\n", backend)
 }

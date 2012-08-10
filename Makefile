@@ -1,5 +1,5 @@
 export GOPATH := $(shell dirname $(shell dirname $(PWD)))
-PACKAGE := seesaw
+PACKAGE := seamless
 
 all:
 	go build $(PACKAGE)
