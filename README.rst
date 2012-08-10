@@ -33,4 +33,6 @@ Miki Tebeka <miki.tebeka@gmail.com> or here_.
 
 LICENSE
 =======
-MIT
+MIT_
+
+.. _MIT: https://bitbucket.org/tebeka/seamless/src/tip/LICENSE.txt

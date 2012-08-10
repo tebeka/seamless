@@ -13,4 +13,7 @@ fix:
 install:
 	go install $(PACKAGE)
 
+readme:
+	rst2html.py README.rst > README.html
+
 .PHONY: all test install fix
