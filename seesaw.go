@@ -31,7 +31,7 @@ func main() {
 }
 
 func forward(local net.Conn, remoteAddr string) {
-	remote, err := net.Dial("tcp", "", remoteAddr)
+	remote, err := net.Dial("tcp", remoteAddr)
 	if remote == nil {
 		fmt.Fprintf(os.Stderr, "remote dial failed: %v\n", err)
 		return
