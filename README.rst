@@ -1,7 +1,8 @@
 `seamless` is a TCP proxy that allow you to deploy new code then switch traffic
 to new backend without downtime.
 
-Switching backends is done with HTTP interface with the following API:
+Switching backends is done with HTTP interface (*on a different port*) with the
+following API:
 
     `/switch?backend=address` 
         switch traffic to new backend
@@ -23,6 +24,14 @@ different port, say 4445). Then::
 
     curl http://localhost:6777/switch?backend=localhost:4445. 
 
+
+(Note that management port is different from the one we proxy).
+
+Installing
+==========
+::
+
+    go get bitbucket.org/tebeka/seamless
 
 Contact
 =======
