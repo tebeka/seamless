@@ -27,6 +27,6 @@ func TestHttp(t *testing.T) {
 	}
 
 	if string(reply) != fmt.Sprintf("%s\n", backend) {
-		t.Fatalf("bad reply: %s\n", reply)
+		t.Fatalf("bad reply: %s\n", string(reply))
 	}
 }
