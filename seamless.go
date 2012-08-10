@@ -30,6 +30,7 @@ import (
 	"os"
 )
 
+// Current backend
 var backend string
 
 func main() {
@@ -63,6 +64,7 @@ func main() {
 	}
 }
 
+// forward proxies traffic between local socket and remote backend
 func forward(local net.Conn, remoteAddr string) {
 	remote, err := net.Dial("tcp", remoteAddr)
 	if remote == nil {
@@ -74,17 +76,20 @@ func forward(local net.Conn, remoteAddr string) {
 	go io.Copy(remote, local)
 }
 
+// die prints error message and aborts the program
 func die(msg string) {
 	fmt.Fprintf(os.Stderr, "error: %s\n", msg)
 	os.Exit(1)
 }
 
+// startHttpServer start the HTTP server interface in a given port
 func startHttpServer(port int) {
 	http.HandleFunc("/switch", switchHandler)
 	http.HandleFunc("/current", currentHandler)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
+// switchHandler handler /switch and switches backend
 func switchHandler(w http.ResponseWriter, req *http.Request) {
 	newBackend := req.FormValue("backend")
 	if len(newBackend) == 0 {
@@ -97,6 +102,7 @@ func switchHandler(w http.ResponseWriter, req *http.Request) {
 	currentHandler(w, req)
 }
 
+// currentHandler handles /current and return the current backend
 func currentHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprintf(w, "%s\n", backend)
