@@ -1,3 +1,5 @@
+// FIXME: Write a full test that starts a backend and seamless, and then
+// switches
 package main
 
 import (
