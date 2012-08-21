@@ -50,15 +50,19 @@ func main() {
 
 	local, err := net.Listen("tcp", localAddr)
 	if local == nil {
-		die(fmt.Sprintf("cannot listen: %v", err))
+		die("cannot listen: %v", err)
 	}
 
-	go startHttpServer(*port)
+	go func() {
+		if err := startHttpServer(*port); err != nil {
+			die("cannot listen on %d: %v", *port, err)
+		}
+	}()
 
 	for {
 		conn, err := local.Accept()
 		if conn == nil {
-			die(fmt.Sprintf("accept failed: %v", err))
+			die("accept failed: %v", err)
 		}
 		go forward(conn, backend)
 	}
@@ -77,16 +81,17 @@ func forward(local net.Conn, remoteAddr string) {
 }
 
 // die prints error message and aborts the program
-func die(msg string) {
+func die(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
 	fmt.Fprintf(os.Stderr, "error: %s\n", msg)
 	os.Exit(1)
 }
 
 // startHttpServer start the HTTP server interface in a given port
-func startHttpServer(port int) {
+func startHttpServer(port int) error {
 	http.HandleFunc("/switch", switchHandler)
 	http.HandleFunc("/current", currentHandler)
-	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
 // switchHandler handler /switch and switches backend
