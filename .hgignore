@@ -2,3 +2,4 @@ syntax: glob
 
 seamless
 README.html
+seamless*.bz2

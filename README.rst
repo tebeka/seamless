@@ -29,6 +29,12 @@ different port, say 4445). Then::
 
 Installing
 ==========
+You can download a statically linked executable at the downloads_ section.
+
+.. _downloads: https://bitbucket.org/tebeka/seamless/downloads
+
+Or if you have a Go development environment, you can
+
 ::
 
     go get bitbucket.org/tebeka/seamless
