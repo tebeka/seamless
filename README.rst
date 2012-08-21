@@ -22,7 +22,7 @@ Process
 When you need to upgrade the backend, start a new one (with new code on a
 different port, say 4445). Then::
 
-    curl http://localhost:6777/switch?backend=localhost:4445. 
+    curl http://localhost:6777/switch?backend=localhost:4445
 
 
 (Note that management port is different from the one we proxy).
