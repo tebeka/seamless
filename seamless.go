@@ -30,6 +30,10 @@ import (
 	"os"
 )
 
+const (
+	Version = "0.1.1"
+)
+
 // Current backend
 var backend string
 
@@ -40,7 +44,14 @@ func main() {
 		flag.PrintDefaults()
 	}
 	port := flag.Int("httpPort", 6777, "http interface port")
+	version := flag.Bool("version", false, "show version and exit")
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("seamless %s\n", Version)
+		os.Exit(0)
+	}
+
 	if flag.NArg() != 2 {
 		flag.Usage()
 		os.Exit(1)
