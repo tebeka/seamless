@@ -28,14 +28,28 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 )
 
 const (
-	Version = "0.1.1"
+	Version = "0.1.2"
 )
 
 // Current backend
 var backend string
+
+// Sync backend changes
+var backendLock sync.RWMutex
+
+// currentBackend returns the current value of the backend in atomic format.
+// (Uses backendLock.RLock)
+func currentBackend() (reply string) {
+	backendLock.RLock()
+	reply = backend
+	backendLock.RUnlock()
+
+	return
+}
 
 func main() {
 	flag.Usage = func() {
@@ -75,7 +89,7 @@ func main() {
 		if conn == nil {
 			die("accept failed: %v", err)
 		}
-		go forward(conn, backend)
+		go forward(conn, currentBackend())
 	}
 }
 
@@ -114,7 +128,10 @@ func switchHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
+
+	backendLock.Lock()
 	backend = newBackend
+	backendLock.Unlock()
 	currentHandler(w, req)
 }
 
