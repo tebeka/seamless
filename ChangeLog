@@ -1,5 +1,5 @@
 2012-09-03 version 0.1.2
-    * Synchronize backend changes (issue #2)
+    * Synchronize backend change [issue #2] (Thanks Jonathan Amsterdam)
 
 2012-08-21 version 0.1.1
     * Handle error in http listener
