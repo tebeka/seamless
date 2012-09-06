@@ -22,7 +22,7 @@
 			* `curl http://localhost:6777/remove?backend=localhost:4444`
 	   Or
 		`curl http://localhost:6777/set?backends=localhost:4445`
-		
+
 	   New traffic will be directed to new server(s).
 
 Original forward code by Roger Peppe (see http://bit.ly/Oc1YtF)
