@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-func TestHttp(t *testing.T) {
-	backend = "hello"
+func TestHttpOld(t *testing.T) {
+	backends = []string{"hello"}
 	port := 6777
 	go startHttpServer(port)
 
@@ -28,7 +28,7 @@ func TestHttp(t *testing.T) {
 		t.Fatalf("error reading reply: %v\n", err)
 	}
 
-	if string(reply) != fmt.Sprintf("%s\n", backend) {
+	if string(reply) != fmt.Sprintf("%s\n", backends[0]) {
 		t.Fatalf("bad reply: %s\n", string(reply))
 	}
 }

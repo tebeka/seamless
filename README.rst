@@ -1,31 +1,39 @@
-`seamless` is a TCP proxy that allow you to deploy new code then switch traffic
-to new backend without downtime.
+`seameless` is a TCP proxy that allow you to deploy new code then switch traffic
+to it without downtime.
 
-Switching backends is done with HTTP interface (*on a different port*) with the
-following API:
+It does "round robin" between the list of current active backends.
 
-    `/switch?backend=address` 
-        switch traffic to new backend
+Switching server is done with HTTP interface with the following API:
 
-    `/current` 
-        return (in plain text) current server
+/set?backends=host:port,host:port
+    set list of backends
+
+/add?backend=host:port
+    add a backend
+
+/remove?backend=host:port
+    remove a backend
+
+/get
+    return host:port,host:port
 
 Process
 =======
-* Start first backend at port 4444
-* Run
-  ::
+* Start `seamleass` with list of active backends::
 
     seamless 8080 localhost:4444
 * Direct all traffic to port 8080 on local machine.
+* When you need to add/remove the backend, use the HTTP API on port 6777
+  different port, say 4445)::
 
-When you need to upgrade the backend, start a new one (with new code on a
-different port, say 4445). Then::
+    curl http://localhost:6777/add?backend=localhost:4445
+    curl http://localhost:6777/remove?backend=localhost:4444
 
-    curl http://localhost:6777/switch?backend=localhost:4445
+  Or::
 
-
-(Note that management port is different from the one we proxy).
+        curl http://localhost:6777/set?backends=localhost:4445
+    
+New traffic will be directed to new backend(s).
 
 Installing
 ==========
@@ -44,6 +52,18 @@ Contact
 Miki Tebeka <miki.tebeka@gmail.com> or here_.
 
 .. _here: https://bitbucket.org/tebeka/seamless
+
+
+Old API
+=======
+`seamless` version < 0.2.0 supported only one backend. The old API is still
+supported.
+
+/switch?backend=host:port
+    equivalent to `/set?backends=host:port`
+
+/current
+    equivalent to `/get`
 
 
 LICENSE
