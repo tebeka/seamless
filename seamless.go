@@ -39,7 +39,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 )
 
 const (
@@ -47,34 +46,14 @@ const (
 )
 
 // List of backends
-var backends []string
+var backends *Backends = &Backends{}
 
-// Current backend
-var currentBackend int
-
-// Sync backend changes
-var backendsLock sync.RWMutex
-
-// backend regular expression
+// backend regular expression (<host>:<port>)
 var backendRe *regexp.Regexp = regexp.MustCompile("^[^:]+:[0-9]+$")
 
 // isValidBackend returns true if backend is in "host:port" format
 func isValidBackend(backend string) bool {
 	return backendRe.MatchString(backend)
-}
-
-// nextBackend returns the next backend to use (uses backendsLock.RLock)
-func nextBackend() (string, error) {
-	backendsLock.RLock()
-	defer backendsLock.RUnlock()
-
-	if len(backends) == 0 {
-		return "", fmt.Errorf("No backends")
-	}
-
-	currentBackend = (currentBackend + 1) % len(backends)
-	backend := backends[currentBackend]
-	return backend, nil
 }
 
 // parseBackends parses string in format "host:port,host:port" and return list of backends
@@ -126,16 +105,7 @@ func startHttpServer(port int) error {
 // getHandler handles /current and return the current backend
 func getHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprintf(w, "%s\n", strings.Join(backends, ","))
-}
-
-// setBackends sets the current list of backends and sets currentBackend to 0
-func setBackends(newBackends []string) {
-	backendsLock.Lock()
-	defer backendsLock.Unlock()
-
-	backends = newBackends
-	currentBackend = 0
+	fmt.Fprintf(w, "%s\n", backends)
 }
 
 // setHandler handler /set and sets backends
@@ -148,7 +118,7 @@ func setHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	setBackends(newBackends)
+	backends.Set(newBackends)
 	getHandler(w, req)
 }
 
@@ -162,24 +132,8 @@ func addHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	backendsLock.Lock()
-	defer backendsLock.Unlock()
-	backends = append(backends, backend)
+	backends.Add(backend)
 	getHandler(w, req)
-}
-
-// remove removes all items matching 'item' from items.
-func remove(items []string, item string) []string {
-	i := 0
-	for i < len(items) {
-		if items[i] == item {
-			items = append(items[:i], items[i+1:]...)
-		} else {
-			i++
-		}
-	}
-
-	return items
 }
 
 // removeHandler handles /remove and remove a backend
@@ -188,7 +142,7 @@ func removeHandler(w http.ResponseWriter, req *http.Request) {
 
 	defer func() {
 		if len(err) != 0 {
-			log.Println(err)
+			log.Printf("error: %s\n", err)
 			http.Error(w, err, http.StatusBadRequest)
 			return
 		} else {
@@ -198,28 +152,26 @@ func removeHandler(w http.ResponseWriter, req *http.Request) {
 
 	backend := req.FormValue("backend")
 	if len(backend) == 0 {
-		err = "error: missing 'backend' parameter"
+		err = "missing 'backend' parameter"
 		return
 	}
 
-	backendsLock.Lock()
-	defer backendsLock.Unlock()
-	newBackends := remove(backends, backend)
-	if len(newBackends) == len(backends) {
-		err = fmt.Sprintf("error: backend '%s' not found", backend)
+	count := backends.Remove(backend)
+	if count == 0 {
+		err = fmt.Sprintf("backend '%s' not found", backend)
 		return
 	}
-
-	backends = newBackends
 }
 
 // seamless launches the HTTP API and then start proxying
-func seamless(localAddr string, apiPort int, backends []string, out chan error) {
+func seamless(localAddr string, apiPort int, backendList []string, out chan error) {
 	local, err := net.Listen("tcp", localAddr)
 	if local == nil {
 		out <- fmt.Errorf("cannot listen: %v", err)
 		return
 	}
+
+	backends.Set(backendList)
 
 	go func() {
 		if err := startHttpServer(apiPort); err != nil {
@@ -232,7 +184,7 @@ func seamless(localAddr string, apiPort int, backends []string, out chan error) 
 		if conn == nil {
 			die("accept failed: %v", err)
 		}
-		backend, err := nextBackend()
+		backend, err := backends.Next()
 		if err != nil {
 			log.Printf("error: can't get next backend %v\n", err)
 			conn.Close()
@@ -263,13 +215,13 @@ func main() {
 	localAddr := fmt.Sprintf(":%s", flag.Arg(0))
 
 	var err error
-	backends, err = parseBackends(flag.Arg(1))
+	backendList, err := parseBackends(flag.Arg(1))
 	if err != nil {
 		die(fmt.Sprintf("%s", err))
 	}
 
 	out := make(chan error)
-	go seamless(localAddr, *port, backends, out)
+	go seamless(localAddr, *port, backendList, out)
 
 	err = <-out
 	if err != nil {

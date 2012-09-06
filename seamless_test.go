@@ -35,7 +35,7 @@ func init() {
 	}
 
 	out := make(chan error)
-	go seamless(fmt.Sprintf(":%d", proxyPort), apiPort, backends, out)
+	go seamless(fmt.Sprintf(":%d", proxyPort), apiPort, []string{}, out)
 
 	time.Sleep(1 * time.Second)
 }
@@ -63,19 +63,19 @@ func callAPI(suffix string) (string, error) {
 }
 
 func TestHTTPGet(t *testing.T) {
-	setBackends([]string{"localhost:8080"})
+	backends.Set([]string{"localhost:8080"})
 	reply, err := callAPI("get")
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
 
-	if reply != fmt.Sprintf("%s\n", backends[0]) {
+	if reply != fmt.Sprintf("%s\n", backends.backends[0]) {
 		t.Fatalf("bad reply: %s\n", string(reply))
 	}
 }
 
 func TestHTTPAdd(t *testing.T) {
-	setBackends([]string{"localhost:8888"})
+	backends.Set([]string{"localhost:8888"})
 	backend := "localhost:8887"
 
 	reply, err := callAPI(fmt.Sprintf("add?backend=%s", backend))
@@ -83,33 +83,33 @@ func TestHTTPAdd(t *testing.T) {
 		t.Fatalf("%s", err)
 	}
 
-	if len(backends) != 2 {
-		t.Fatalf("bad number of backends (%d)\nreply: %s", len(backends), reply)
+	if len(backends.backends) != 2 {
+		t.Fatalf("bad number of backends (%d)\nreply: %s", len(backends.backends), reply)
 	}
 
-	if backends[1] != backend {
-		t.Fatalf("bad backend - %s", backends[0])
+	if backends.backends[1] != backend {
+		t.Fatalf("bad backend - %s", backends.backends[0])
 	}
 
-	if reply != fmt.Sprintf("%s,%s\n", backends[0], backends[1]) {
+	if reply != fmt.Sprintf("%s,%s\n", backends.backends[0], backends.backends[1]) {
 		t.Fatalf("bad reply - %s\n", reply)
 	}
 }
 
 func TestHTTPRemove(t *testing.T) {
 	backend1, backend2 := "localhost:8888", "localhost:8887"
-	setBackends([]string{backend1, backend2})
+	backends.Set([]string{backend1, backend2})
 	reply, err := callAPI(fmt.Sprintf("remove?backend=%s", backend1))
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
 
-	if len(backends) != 1 {
-		t.Fatalf("bad number of backends (%d)\nreply: %s", len(backends), reply)
+	if len(backends.backends) != 1 {
+		t.Fatalf("bad number of backends (%d)\nreply: %s", len(backends.backends), reply)
 	}
 
-	if backends[0] != backend2 {
-		t.Fatalf("bad backend left - %s", backends[0])
+	if backends.backends[0] != backend2 {
+		t.Fatalf("bad backend left - %s", backends.backends[0])
 	}
 }
 
@@ -135,24 +135,6 @@ func Test_isValidBackend(t *testing.T) {
 		if isValidBackend(c.value) != c.valid {
 			t.Fatalf("`%s` should be %s", c.value, names[c.valid])
 		}
-	}
-}
-
-func Test_nextBackend(t *testing.T) {
-	backend1, backend2 := "localhost:8888", "localhost:8887"
-	setBackends([]string{backend1, backend2})
-
-	for i, expected := range []string{backend2, backend1, backend2} {
-		next, _ := nextBackend()
-		if next != expected {
-			t.Fatalf("backend should be %s at %d (was %s)", expected, i, next)
-		}
-	}
-
-	backends = []string{backend1, backend2}
-	_, err := nextBackend()
-	if err != nil {
-		t.Fatalf("managed to get backend from empty list")
 	}
 }
 
@@ -208,14 +190,14 @@ func callProxy() (string, error) {
 }
 
 func TestProxy(t *testing.T) {
-	setBackends([]string{backendAddr(0), backendAddr(1)})
+	backends.Set([]string{backendAddr(0), backendAddr(1)})
 
 	for i := 0; i < 7; i++ {
 		reply, err := callProxy()
 		if err != nil {
 			t.Fatalf("can't call proxy - %v", err)
 		}
-		expected := fmt.Sprintf("%d", (i+1)%len(backends))
+		expected := fmt.Sprintf("%d", (i+1)%len(backends.backends))
 		if reply != expected {
 			t.Fatalf("bad backend for i=%d: got %s instead of %s", i, reply, expected)
 		}
@@ -223,7 +205,7 @@ func TestProxy(t *testing.T) {
 }
 
 func TestProxyRemove(t *testing.T) {
-	setBackends([]string{backendAddr(0), backendAddr(1)})
+	backends.Set([]string{backendAddr(0), backendAddr(1)})
 	suffix := fmt.Sprintf("remove?backend=%s", backendAddr(0))
 	if _, err := callAPI(suffix); err != nil {
 		t.Fatalf("can't remove %s - %s", backendAddr(0), err)
@@ -241,7 +223,7 @@ func TestProxyRemove(t *testing.T) {
 }
 
 func TestProxyAdd(t *testing.T) {
-	setBackends([]string{backendAddr(0), backendAddr(1)})
+	backends.Set([]string{backendAddr(0), backendAddr(1)})
 
 	suffix := fmt.Sprintf("add?backend=%s", backendAddr(2))
 	if _, err := callAPI(suffix); err != nil {
@@ -253,7 +235,7 @@ func TestProxyAdd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("can't call proxy - %v", err)
 		}
-		expected := fmt.Sprintf("%d", (i+1)%len(backends))
+		expected := fmt.Sprintf("%d", (i+1)%len(backends.backends))
 		if reply != expected {
 			t.Fatalf("bad reply %s (expected %s)", reply, expected)
 		}
