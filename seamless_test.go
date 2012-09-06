@@ -10,19 +10,41 @@ import (
 	"time"
 )
 
-var port int = 6777
+var apiPort int = 6777
+var numBackends int = 3
+var proxyPort = 6888
+
+type testHandler int
+
+func (h testHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	fmt.Fprintf(w, "%d", h)
+}
+
+func startBackend(i int) {
+	handler := testHandler(i)
+	port := 6700 + i
+	server := http.Server{Handler: handler, Addr: fmt.Sprintf(":%d", port)}
+	go server.ListenAndServe()
+}
 
 func init() {
-	backends = []string{"localhost:8888"}
-	go startHttpServer(port)
+	for i := 0; i < numBackends; i++ {
+		startBackend(i)
+	}
+
+	out := make(chan error)
+	go seamless(fmt.Sprintf(":%d", proxyPort), apiPort, backends, out)
+
 	time.Sleep(1 * time.Second)
 }
 
-func callAPI(suffix string) (string, error) {
-	url := fmt.Sprintf("http://localhost:%d/%s", port, suffix)
-	resp, err := http.Get(url)
+func call(url string) (string, error) {
+	// We really don't want keep alive or caching :)
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	resp, err := client.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("error connecting to /current: %v\n", err)
+		return "", fmt.Errorf("can't GET %s: %v\n", url, err)
 	}
 	defer resp.Body.Close()
 
@@ -34,8 +56,14 @@ func callAPI(suffix string) (string, error) {
 	return string(reply), nil
 }
 
-func getTest(suffix string, t *testing.T) {
-	reply, err := callAPI(suffix)
+func callAPI(suffix string) (string, error) {
+	url := fmt.Sprintf("http://localhost:%d/%s", apiPort, suffix)
+	return call(url)
+}
+
+func TestHTTPGet(t *testing.T) {
+	setBackends([]string{"localhost:8080"})
+	reply, err := callAPI("get")
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -45,16 +73,8 @@ func getTest(suffix string, t *testing.T) {
 	}
 }
 
-func TestHttpOldAPI(t *testing.T) {
-	getTest("current", t)
-}
-
-func TestHTTPGet(t *testing.T) {
-	getTest("get", t)
-}
-
 func TestHTTPAdd(t *testing.T) {
-	backends = []string{"localhost:8888"}
+	setBackends([]string{"localhost:8888"})
 	backend := "localhost:8887"
 
 	reply, err := callAPI(fmt.Sprintf("add?backend=%s", backend))
@@ -77,7 +97,7 @@ func TestHTTPAdd(t *testing.T) {
 
 func TestHTTPRemove(t *testing.T) {
 	backend1, backend2 := "localhost:8888", "localhost:8887"
-	backends = []string{backend1, backend2}
+	setBackends([]string{backend1, backend2})
 	reply, err := callAPI(fmt.Sprintf("remove?backend=%s", backend1))
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -119,10 +139,9 @@ func Test_isValidBackend(t *testing.T) {
 
 func Test_nextBackend(t *testing.T) {
 	backend1, backend2 := "localhost:8888", "localhost:8887"
-	backends = []string{backend1, backend2}
-	currentBackend = 0
+	setBackends([]string{backend1, backend2})
 
-	for i, expected := range []string{backend1, backend2, backend1} {
+	for i, expected := range []string{backend2, backend1, backend2} {
 		next, _ := nextBackend()
 		if next != expected {
 			t.Fatalf("backend should be %s at %d (was %s)", expected, i, next)
@@ -175,6 +194,67 @@ func Test_parseBackends(t *testing.T) {
 			t.Fatalf("go %v for %s (expected %v)", value, c.backends, c.expected)
 		}
 
+	}
+}
 
+func backendAddr(i int) string {
+	return fmt.Sprintf("localhost:%d", 6700+i)
+}
+
+func callProxy() (string, error) {
+	url := fmt.Sprintf("http://localhost:%d", proxyPort)
+	return call(url)
+}
+
+func TestProxy(t *testing.T) {
+	setBackends([]string{backendAddr(0), backendAddr(1)})
+
+	for i := 0; i < 7; i++ {
+		reply, err := callProxy()
+		if err != nil {
+			t.Fatalf("can't call proxy - %v", err)
+		}
+		expected := fmt.Sprintf("%d", (i+1)%len(backends))
+		if reply != expected {
+			t.Fatalf("bad backend for i=%d: got %s instead of %s", i, reply, expected)
+		}
+	}
+}
+
+func TestProxyRemove(t *testing.T) {
+	setBackends([]string{backendAddr(0), backendAddr(1)})
+	suffix := fmt.Sprintf("remove?backend=%s", backendAddr(0))
+	if _, err := callAPI(suffix); err != nil {
+		t.Fatalf("can't remove %s - %s", backendAddr(0), err)
+	}
+
+	for i := 0; i < 7; i++ {
+		reply, err := callProxy()
+		if err != nil {
+			t.Fatalf("can't call proxy - %v", err)
+		}
+		if reply != "1" {
+			t.Fatalf("bad reply %s (expected 1)", reply)
+		}
+	}
+}
+
+func TestProxyAdd(t *testing.T) {
+	setBackends([]string{backendAddr(0), backendAddr(1)})
+
+	suffix := fmt.Sprintf("add?backend=%s", backendAddr(2))
+	if _, err := callAPI(suffix); err != nil {
+		t.Fatalf("can't remove %s - %s", backendAddr(0), err)
+	}
+
+	for i := 0; i < 7; i++ {
+		reply, err := callProxy()
+		if err != nil {
+			t.Fatalf("can't call proxy - %v", err)
+		}
+		expected := fmt.Sprintf("%d", (i+1)%len(backends))
+		if reply != expected {
+			t.Fatalf("bad reply %s (expected %s)", reply, expected)
+		}
 	}
 }

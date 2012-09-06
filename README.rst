@@ -54,18 +54,6 @@ Miki Tebeka <miki.tebeka@gmail.com> or here_.
 .. _here: https://bitbucket.org/tebeka/seamless
 
 
-Old API
-=======
-`seamless` version < 0.2.0 supported only one backend. The old API is still
-supported.
-
-/switch?backend=host:port
-    equivalent to `/set?backends=host:port`
-
-/current
-    equivalent to `/get`
-
-
 LICENSE
 =======
 MIT_

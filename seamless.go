@@ -55,15 +55,15 @@ var currentBackend int
 // Sync backend changes
 var backendsLock sync.RWMutex
 
+// backend regular expression
 var backendRe *regexp.Regexp = regexp.MustCompile("^[^:]+:[0-9]+$")
 
-// isValidBackend returns true if backend is in "host:port" format.
+// isValidBackend returns true if backend is in "host:port" format
 func isValidBackend(backend string) bool {
 	return backendRe.MatchString(backend)
 }
 
-// nextBackend returns the next backend to use.
-// (Uses backendsLock.RLock)
+// nextBackend returns the next backend to use (uses backendsLock.RLock)
 func nextBackend() (string, error) {
 	backendsLock.RLock()
 	defer backendsLock.RUnlock()
@@ -72,11 +72,12 @@ func nextBackend() (string, error) {
 		return "", fmt.Errorf("No backends")
 	}
 
-	backend := backends[currentBackend]
 	currentBackend = (currentBackend + 1) % len(backends)
+	backend := backends[currentBackend]
 	return backend, nil
 }
 
+// parseBackends parses string in format "host:port,host:port" and return list of backends
 func parseBackends(str string) ([]string, error) {
 	backends := strings.Split(str, ",")
 	if len(backends) == 0 {
@@ -119,36 +120,7 @@ func startHttpServer(port int) error {
 	http.HandleFunc("/add", addHandler)
 	http.HandleFunc("/remove", removeHandler)
 
-	// Support pre 0.2.0 API
-	http.HandleFunc("/current", getHandler)
-	http.HandleFunc("/switch", switchHandler)
-
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
-}
-
-func setBackends(param string, w http.ResponseWriter, req *http.Request) {
-	newBackends, err := parseBackends(req.FormValue(param))
-	if err != nil {
-		msg := fmt.Sprintf("error: %s", err)
-		log.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
-		return
-	}
-
-	backendsLock.Lock()
-	defer backendsLock.Unlock()
-	backends = newBackends
-	getHandler(w, req)
-}
-
-// switchHandler handler /switch and switches backend
-func switchHandler(w http.ResponseWriter, req *http.Request) {
-	setBackends("backend", w, req)
-}
-
-// setHandler handler /switch and switches backend
-func setHandler(w http.ResponseWriter, req *http.Request) {
-	setBackends("backends", w, req)
 }
 
 // getHandler handles /current and return the current backend
@@ -157,6 +129,30 @@ func getHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "%s\n", strings.Join(backends, ","))
 }
 
+// setBackends sets the current list of backends and sets currentBackend to 0
+func setBackends(newBackends []string) {
+	backendsLock.Lock()
+	defer backendsLock.Unlock()
+
+	backends = newBackends
+	currentBackend = 0
+}
+
+// setHandler handler /set and sets backends
+func setHandler(w http.ResponseWriter, req *http.Request) {
+	newBackends, err := parseBackends(req.FormValue("backends"))
+	if err != nil {
+		msg := fmt.Sprintf("error: %s", err)
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	setBackends(newBackends)
+	getHandler(w, req)
+}
+
+// addHandler handles /add to add a new backend
 func addHandler(w http.ResponseWriter, req *http.Request) {
 	backend := req.FormValue("backend")
 	if len(backend) == 0 {
@@ -186,6 +182,7 @@ func remove(items []string, item string) []string {
 	return items
 }
 
+// removeHandler handles /remove and remove a backend
 func removeHandler(w http.ResponseWriter, req *http.Request) {
 	err := ""
 
@@ -216,6 +213,34 @@ func removeHandler(w http.ResponseWriter, req *http.Request) {
 	backends = newBackends
 }
 
+// seamless launches the HTTP API and then start proxying
+func seamless(localAddr string, apiPort int, backends []string, out chan error) {
+	local, err := net.Listen("tcp", localAddr)
+	if local == nil {
+		out <- fmt.Errorf("cannot listen: %v", err)
+		return
+	}
+
+	go func() {
+		if err := startHttpServer(apiPort); err != nil {
+			out <- fmt.Errorf("cannot listen on %d: %v", apiPort, err)
+		}
+	}()
+
+	for {
+		conn, err := local.Accept()
+		if conn == nil {
+			die("accept failed: %v", err)
+		}
+		backend, err := nextBackend()
+		if err != nil {
+			log.Printf("error: can't get next backend %v\n", err)
+			conn.Close()
+		}
+		go forward(conn, backend)
+	}
+}
+
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: seamless LISTEN_PORT BACKENDS\n")
@@ -236,33 +261,18 @@ func main() {
 		os.Exit(1)
 	}
 	localAddr := fmt.Sprintf(":%s", flag.Arg(0))
+
 	var err error
 	backends, err = parseBackends(flag.Arg(1))
 	if err != nil {
 		die(fmt.Sprintf("%s", err))
 	}
 
-	local, err := net.Listen("tcp", localAddr)
-	if local == nil {
-		die("cannot listen: %v", err)
-	}
+	out := make(chan error)
+	go seamless(localAddr, *port, backends, out)
 
-	go func() {
-		if err := startHttpServer(*port); err != nil {
-			die("cannot listen on %d: %v", *port, err)
-		}
-	}()
-
-	for {
-		conn, err := local.Accept()
-		if conn == nil {
-			die("accept failed: %v", err)
-		}
-		backend, err := nextBackend()
-		if err != nil {
-			log.Printf("error: can't get next backend %v\n", err)
-			conn.Close()
-		}
-		go forward(conn, backend)
+	err = <-out
+	if err != nil {
+		die("%s", err)
 	}
 }
