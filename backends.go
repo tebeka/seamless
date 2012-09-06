@@ -65,5 +65,8 @@ func (bs *Backends) Remove(backend string) int {
 
 // String is string representation of backends
 func (bs *Backends) String() string {
+	bs.lock.Lock()
+	defer bs.lock.Unlock()
+
 	return strings.Join(bs.backends, ",")
 }
