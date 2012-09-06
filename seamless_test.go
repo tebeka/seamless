@@ -16,6 +16,7 @@ var proxyPort = 6888
 
 type testHandler int
 
+// startBackend spawns an HTTP server the listens on 6700+i port and replies with i to requests.
 func (h testHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprintf(w, "%d", h)
