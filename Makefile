@@ -13,10 +13,13 @@ fix:
 install:
 	go install $(PACKAGE)
 
+clean:
+	go clean $(PACKAGE)
+
 readme:
 	rst2html.py README.rst > README.html
 
 archives:
 	./build-archives.sh
 
-.PHONY: all test install fix
+.PHONY: all test install fix clean
