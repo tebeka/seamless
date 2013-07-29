@@ -76,7 +76,7 @@ func parseBackends(str string) ([]string, error) {
 // forward proxies traffic between local socket and remote backend
 func forward(local net.Conn, remoteAddr string) {
 	remote, err := net.Dial("tcp", remoteAddr)
-	if remote == nil {
+	if err != nil {
 		log.Printf("remote dial failed: %v\n", err)
 		local.Close()
 		return
